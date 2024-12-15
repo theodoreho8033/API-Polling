@@ -1,1 +1,5 @@
 Backend/server.exe
+Client/node_modules
+Client/dist
+
+
