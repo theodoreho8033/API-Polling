@@ -1,17 +1,15 @@
 {
-  "name": "client",
+  "name": "test",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "build": "tsc",
-    "test": "node dist/index.js"
+    "build": "tsc --build --verbose",
+    "test": "node dist/Test/src/test.js"
   },
-  "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "devDependencies": {
-    "@types/node": "^22.10.2",
     "typescript": "^5.7.2"
   },
   "dependencies": {

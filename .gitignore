@@ -1,5 +1,6 @@
 Backend/server.exe
 Client/node_modules
 Client/dist
-
+Test/node_modules
+Test/dist
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -38,7 +39,9 @@ func newSim(sim_time time.Duration, err_rate float64, timeout_limit time.Duratio
 		defer sim.lock.Unlock()
 
 		if sim.req_status == "pending" { // dont change status if status is already changed
-			if rand.ExpFloat64() < sim.err_rate {
+			rand_float := rand.ExpFloat64()
+			log.Printf("error rate %f, number %f", sim.err_rate, rand_float)
+			if rand_float < sim.err_rate {
 				sim.req_status = "error"
 			} else {
 				sim.req_status = "completed"
@@ -52,11 +55,6 @@ func newSim(sim_time time.Duration, err_rate float64, timeout_limit time.Duratio
 
 }
 
-//func (s *SimInstance) logRequest(){
-//	log.Printf("	Status: %s\n	Runtime:	%")
-//}
-
-// short polling, simply return current status
 func (s *SimInstance) shortPoll(w http.ResponseWriter, r *http.Request) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -65,6 +63,47 @@ func (s *SimInstance) shortPoll(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	fmt.Fprintf(w, "{\"result\" : \"%s\"}", s.req_status)
 
+}
+
+func (s *SimInstance) resetInstance(w http.ResponseWriter, r *http.Request) {
+	// Ensure only POST requests are allowed
+	if r.Method != http.MethodPost {
+		http.Error(w, "Only POST requests are allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Define the JSON structure for incoming requests
+	type EditRequest struct {
+		SimTime      *int     `json:"sim_time"`      // Seconds as an integer
+		ErrRate      *float64 `json:"err_rate"`      // Error rate as a float
+		TimeoutLimit *int     `json:"timeout_limit"` // Seconds as an integer
+	}
+
+	var req EditRequest
+	// Decode the JSON body
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	// Lock the instance for safe concurrent updates
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	// Update fields only if provided in the request
+	if req.SimTime != nil {
+		s.sim_time = time.Duration(*req.SimTime) * time.Second
+	}
+	if req.ErrRate != nil {
+		s.err_rate = *req.ErrRate
+	}
+	if req.TimeoutLimit != nil {
+		s.timeout_limit = time.Duration(*req.TimeoutLimit) * time.Second
+	}
+
+	// Respond with a success message
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(w, `{"message": "Fields updated successfully"}`)
 }
 
 func (s *SimInstance) longPoll(w http.ResponseWriter, r *http.Request) {
@@ -131,8 +170,8 @@ func (s *SimInstance) SSE(w http.ResponseWriter, r *http.Request) {
 }
 func main() {
 
-	process_time := flag.Duration("process_time", 10*time.Second, "Number of seconds before response is sent. Default 10.")
-	error_rate := flag.Float64("error_rate", 0.1, "Probability of sending error response. Default 0.1")
+	process_time := flag.Duration("process_time", 20*time.Second, "Number of seconds before response is sent. Default 10.")
+	error_rate := flag.Float64("error_rate", 0.0, "Probability of sending error response. Default 0.1")
 	timeout_limit := flag.Duration("timeout_limit", 30*time.Second, "Seconds before request times out. For long polling only. Default 30.")
 	polling_method := flag.String("polling_method", "short_polling", "Server polling method. One of ['short_polling', 'long_polling', 'sse']")
 	port := flag.String("port", ":8080", "Server port")
@@ -150,6 +189,7 @@ func main() {
 		http.HandleFunc("/status", sim.SSE)
 	}
 
+	http.HandleFunc("/edit", sim.resetInstance)
 	log.Printf("\nServer running port %s\nMethod: %s", *port, *polling_method)
 	if err := http.ListenAndServe(*port, nil); err != nil {
 		log.Fatalf("Server Error: %v", err)
