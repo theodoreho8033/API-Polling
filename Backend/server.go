@@ -20,179 +20,208 @@ type SimInstance struct {
 	status_updated chan struct{}
 	lock           sync.Mutex
 	num_reqs       int64
+	server_wait    time.Duration
 }
 
 func newSim(sim_time time.Duration, err_rate float64, timeout_limit time.Duration) *SimInstance {
-
-	sim := &SimInstance{
+	return &SimInstance{
 		sim_time:       sim_time,
 		err_rate:       err_rate,
-		req_status:     "pending",
+		req_status:     "init",
 		timeout_limit:  timeout_limit,
 		status_updated: make(chan struct{}, 1),
 		start_time:     time.Now(),
 		num_reqs:       0,
 	}
+}
 
-	time.AfterFunc(sim_time, func() { // after simulation time is up, update status
+func (s *SimInstance) resetSimulation(sim_time time.Duration, err_rate float64, server_wait time.Duration) {
+	s.lock.Lock()
+
+	if s.req_status == "pending" {
+		statusChan := s.status_updated
+		s.lock.Unlock()
+
+		<-statusChan
+
+		s.lock.Lock()
+	}
+
+	s.sim_time = sim_time
+	s.err_rate = err_rate
+	s.server_wait = server_wait
+	s.req_status = "pending"
+	s.status_updated = make(chan struct{}, 1)
+	s.lock.Unlock()
+
+	s.runSim()
+}
+
+func (s *SimInstance) runSim() {
+	time.AfterFunc(s.sim_time, func() {
+		s.lock.Lock()
+		defer s.lock.Unlock()
+
+		if s.req_status == "pending" {
+			rand_float := rand.Float64()
+			log.Printf("Error rate: %f, Random number: %f", s.err_rate, rand_float)
+			if rand_float < s.err_rate {
+				s.req_status = "error"
+			} else {
+				s.req_status = "completed"
+			}
+		}
+		close(s.status_updated)
+	})
+}
+
+func shortPollHandler(sim *SimInstance) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(sim.server_wait)
 		sim.lock.Lock()
 		defer sim.lock.Unlock()
 
-		if sim.req_status == "pending" { // dont change status if status is already changed
-			rand_float := rand.ExpFloat64()
-			log.Printf("error rate %f, number %f", sim.err_rate, rand_float)
-			if rand_float < sim.err_rate {
-				sim.req_status = "error"
-			} else {
-				sim.req_status = "completed"
-			}
-		}
-		close(sim.status_updated)
-
-	})
-
-	return sim
-
-}
-
-func (s *SimInstance) shortPoll(w http.ResponseWriter, r *http.Request) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	s.num_reqs += 1
-
-	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, "{\"result\" : \"%s\"}", s.req_status)
-
-}
-
-func (s *SimInstance) resetInstance(w http.ResponseWriter, r *http.Request) {
-	// Ensure only POST requests are allowed
-	if r.Method != http.MethodPost {
-		http.Error(w, "Only POST requests are allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Define the JSON structure for incoming requests
-	type EditRequest struct {
-		SimTime      *int     `json:"sim_time"`      // Seconds as an integer
-		ErrRate      *float64 `json:"err_rate"`      // Error rate as a float
-		TimeoutLimit *int     `json:"timeout_limit"` // Seconds as an integer
-	}
-
-	var req EditRequest
-	// Decode the JSON body
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
-		return
-	}
-
-	// Lock the instance for safe concurrent updates
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	// Update fields only if provided in the request
-	if req.SimTime != nil {
-		s.sim_time = time.Duration(*req.SimTime) * time.Second
-	}
-	if req.ErrRate != nil {
-		s.err_rate = *req.ErrRate
-	}
-	if req.TimeoutLimit != nil {
-		s.timeout_limit = time.Duration(*req.TimeoutLimit) * time.Second
-	}
-
-	// Respond with a success message
-	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"message": "Fields updated successfully"}`)
-}
-
-func (s *SimInstance) longPoll(w http.ResponseWriter, r *http.Request) {
-
-	s.lock.Lock()
-
-	if s.req_status != "pending" {
-		s.lock.Unlock()
+		sim.num_reqs++
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, "{\"result\" : \"%s\"}", s.req_status)
-		return
+		jsonResponse(w, map[string]string{"result": sim.req_status})
 	}
-
-	status_channel := s.status_updated
-	s.lock.Unlock()
-	select {
-	case <-status_channel:
-
-	case <-time.After(s.timeout_limit):
-
-	}
-	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, "{\"result\" : \"%s\"}", s.req_status)
 }
 
-func (s *SimInstance) SSE(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
+func longPollHandler(sim *SimInstance) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sim.lock.Lock()
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
-		return
+		if sim.req_status != "pending" {
+			sim.lock.Unlock()
+			jsonResponse(w, map[string]string{"result": sim.req_status})
+			return
+		}
+
+		statusChan := sim.status_updated
+		sim.lock.Unlock()
+
+		select {
+		case <-statusChan:
+		case <-time.After(sim.timeout_limit):
+		}
+
+		jsonResponse(w, map[string]string{"result": sim.req_status})
 	}
+}
 
-	s.lock.Lock()
-	initial_status := s.req_status
-	s.lock.Unlock()
+func sseHandler(sim *SimInstance) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
 
-	// Send the initial result
-	fmt.Fprintf(w, "data: {\"result\": \"%s\"}\n\n", initial_status)
-	flusher.Flush()
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+			return
+		}
 
-	if initial_status != "pending" {
-		return
-	}
+		sim.lock.Lock()
+		initialStatus := sim.req_status
+		sim.lock.Unlock()
 
-	// Wait for updates and send them
-	statusChan := s.status_updated
-
-	select {
-	case <-statusChan:
-		// Status updated
-		s.lock.Lock()
-		new_status := s.req_status
-		s.lock.Unlock()
-		fmt.Fprintf(w, "data: {\"result\": \"%s\"}\n\n", new_status)
+		fmt.Fprintf(w, "data: {\"result\": \"%s\"}\n\n", initialStatus)
 		flusher.Flush()
-	case <-r.Context().Done():
-		// Client disconnected
-		return
+
+		if initialStatus != "pending" {
+			return
+		}
+
+		statusChan := sim.status_updated
+		select {
+		case <-statusChan:
+			sim.lock.Lock()
+			newStatus := sim.req_status
+			sim.lock.Unlock()
+			fmt.Fprintf(w, "data: {\"result\": \"%s\"}\n\n", newStatus)
+			flusher.Flush()
+		case <-r.Context().Done():
+			return
+		}
 	}
 }
-func main() {
 
-	process_time := flag.Duration("process_time", 20*time.Second, "Number of seconds before response is sent. Default 10.")
-	error_rate := flag.Float64("error_rate", 0.0, "Probability of sending error response. Default 0.1")
-	timeout_limit := flag.Duration("timeout_limit", 30*time.Second, "Seconds before request times out. For long polling only. Default 30.")
-	polling_method := flag.String("polling_method", "short_polling", "Server polling method. One of ['short_polling', 'long_polling', 'sse']")
+func resetHandler(sim *SimInstance) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Only POST requests are allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			SimTime    *int     `json:"sim_time"`
+			ErrRate    *float64 `json:"err_rate"`
+			ServerWait *int     `json:"server_wait"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+			return
+		}
+
+		sim.resetSimulation(
+			time.Duration(getOrDefault(req.SimTime, 5))*time.Second,
+			getOrDefault(req.ErrRate, 0.1),
+			time.Duration(getOrDefault(req.ServerWait, 0))*time.Millisecond,
+		)
+
+		jsonResponse(w, map[string]string{"message": "Fields updated successfully"})
+	}
+}
+
+func getOrDefault[T any](val *T, def T) T {
+	if val != nil {
+		return *val
+	}
+	return def
+}
+
+func jsonResponse(w http.ResponseWriter, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(data)
+}
+
+func setupServer(sim *SimInstance, pollingMethod string, port string) *http.Server {
+	switch pollingMethod {
+	case "short_polling":
+		http.HandleFunc("/status", shortPollHandler(sim))
+	case "long_polling":
+		http.HandleFunc("/status", longPollHandler(sim))
+	case "sse":
+		http.HandleFunc("/status", sseHandler(sim))
+	default:
+		log.Fatalf("Invalid polling method: %s", pollingMethod)
+	}
+
+	http.HandleFunc("/reset", resetHandler(sim))
+
+	return &http.Server{
+		Addr:         port,
+		WriteTimeout: 5 * time.Second,
+		IdleTimeout:  15 * time.Second,
+	}
+}
+
+func main() {
+	processTime := flag.Duration("process_time", 5*time.Second, "Seconds before response is sent.")
+	errorRate := flag.Float64("error_rate", 0.1, "Probability of sending error response.")
+	timeoutLimit := flag.Duration("timeout_limit", 30*time.Second, "Seconds before request times out.")
+	pollingMethod := flag.String("polling_method", "short_polling", "Polling method: short_polling, long_polling, sse.")
 	port := flag.String("port", ":8080", "Server port")
 
 	flag.Parse()
 
-	sim := newSim(*process_time, *error_rate, *timeout_limit)
+	sim := newSim(*processTime, *errorRate, *timeoutLimit)
 
-	//use correct method dending on server type
-	if *polling_method == "short_polling" {
-		http.HandleFunc("/status", sim.shortPoll)
-	} else if *polling_method == "long_polling" {
-		http.HandleFunc("/status", sim.longPoll)
-	} else {
-		http.HandleFunc("/status", sim.SSE)
-	}
+	server := setupServer(sim, *pollingMethod, *port)
 
-	http.HandleFunc("/edit", sim.resetInstance)
-	log.Printf("\nServer running port %s\nMethod: %s", *port, *polling_method)
-	if err := http.ListenAndServe(*port, nil); err != nil {
+	log.Printf("Server running on port %s using method: %s", *port, *pollingMethod)
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("Server Error: %v", err)
 	}
-
 }

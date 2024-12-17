@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "build": "tsc --build --verbose",
-    "test": "node dist/Test/src/test.js"
+    "build": "tsc",
+    "test": "node --no-warnings dist/Test/src/test.js"
   },
   "author": "",
   "license": "ISC",

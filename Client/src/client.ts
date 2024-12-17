@@ -4,12 +4,12 @@ import fetch, {Request,  Response, RequestInit} from 'node-fetch';
 export interface ClientOptions{
     host: string            
     poll_interval: number 
-    max_timeout: number 
     max_polls: number 
     max_retry: number 
     initial_delay: number 
     exp_backoff?: number
     req_opts?: RequestInit
+    timeout_limit: number
   
     
 
@@ -45,7 +45,17 @@ export class Client{
         
        
     }
-    //rename to isError/isPending
+    private resetPolls(){
+        this.polls = {
+            res: null,
+            poll_count: 0, 
+            retry_count: -1,
+            total_time: 0,
+            status: "pending",
+            
+        } 
+    }
+    
     protected isPending(res: any): boolean{
         return res.result == "pending"
     }
@@ -57,7 +67,7 @@ export class Client{
 
     protected getNextDelay(poll: Polls): number{
         if (this.options.exp_backoff != null){
-            return this.options.exp_backoff ** poll.poll_count  
+            return this.options.poll_interval * this.options.exp_backoff ** poll.poll_count  
         }else{
             return this.options.poll_interval
         }
@@ -66,40 +76,65 @@ export class Client{
 
 
     async poll(): Promise<void> {
+        this.resetPolls()
         const start_time = Date.now()
         while (this.polls.retry_count < this.options.max_retry && this.polls.status !== 'complete') {
             this.polls.retry_count += 1;
-            var cur_poll_count = 0;
+            let cur_poll_count = 0;
             await sleep(this.options.initial_delay);
     
-            while (cur_poll_count < this.options.max_polls && this.polls.status === 'pending') {
+            while (cur_poll_count < this.options.max_polls && this.polls.status == 'pending') {
+                const controller = new AbortController();
+                const signal = controller.signal;
+                const timeoutId = setTimeout(() => {
+                    controller.abort();
+                    }, this.options.timeout_limit);
                 try {
-                    const response = await fetch(this.options.host, this.options.req_opts);
+                    
+                    const response = await fetch(this.options.host, { ...this.options.req_opts, signal});
+                    clearTimeout(timeoutId);
+                    
+    
+                    if (!response.ok){
+                        this.polls.poll_error = `Error: Server Response - ${response.status} - ${response.statusText}`;
+                        this.polls.status = 'error'
+                        break
+                    }
                     const body = await response.json();
-    
                     this.polls.res = JSON.stringify(body);
-    
-                    if (this.isError(body) || !response.ok) {
+                    if (this.isError(body)) {
+                        
                         this.polls.status = "error";
-                        this.polls.poll_error = `Error: ${response.status} - ${response.statusText}`;
+                        this.polls.poll_error = "Error: Client.isError() condition met on response body"
+                        break
                     } else if (this.isPending(body)) {
                         cur_poll_count += 1;
                         this.polls.poll_count +=1;
                         await sleep(this.getNextDelay(this.polls));
                     } else {
-                        
+                        this.polls.poll_error = "Success"
                         this.polls.status = 'complete';
                     }
                 } catch (error) {
-                    this.polls.poll_error = error instanceof Error ? error.message : String(error);
+                    if (error instanceof Error && error.name === 'AbortError') {
+                        this.polls.poll_error = `Error: Request timeout limit reached: ${this.options.timeout_limit}ms`;
+                    } else if (error instanceof Error) {
+                        this.polls.poll_error = `Error: ${error.message}`;
+                    } else {
+                        this.polls.poll_error = `Client Error: ${String(error)}`;
+                    }
                     this.polls.status = "error";
-                    
-                    this.polls.total_time = Date.now() - start_time
-                    
+                }finally{
+                    clearTimeout(timeoutId);  
                 }
             }
             
             
+        }
+
+        if (this.polls.retry_count == this.options.max_retry  && this.polls.status == 'pending'){
+            this.polls.status = 'error'
+            this.polls.poll_error = 'Error: Max polling limit reached.'
         }
         this.polls.total_time = Date.now() - start_time
     }
