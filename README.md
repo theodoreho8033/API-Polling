@@ -13,7 +13,9 @@ This project is a polling library used for polling a status from a provided API 
 
 ## Quick Start
 ### Running Test Cases
-After cloning the repository, run the sh file ./Test/test.sh to test the library. Ensure Go is installed to run test server. 
+After cloning the repository, run the sh file ./Test/test.sh to test the library. 
+
+**ENSURE NODE VERSION 22 AND GO ARE INSTALLED BEFORE RUNNING TEST SCRIPT
 
 ### Implementing to your application
 ```typescript
@@ -39,7 +41,7 @@ const options: ClientOptions = {
         max_polls: 600,             //number of polls per try
         max_retry: 0,               //number of retries on error
         initial_delay: 0,           //initial delay before sending first polling request
-        timeout_limit: 50 * 1000,   // requests timeout after 50 seconds
+        timeout_limit: 50 * 1000,   // each status request timesout after 50 seconds
         req_opts: {                 // configure fetch Request.init 
             method: 'GET',
             headers: { 'Content-Type': 'application/json' },
@@ -62,8 +64,8 @@ const client = new MyClient(options)
 | `poll_interval` | number  | Delay between polls in milliseconds.             |
 | `max_polls`     | number  | Maximum number of polls per retry.               |
 | `max_retry`     | number  | Maximum retry attempts.                          |
-| `initial_delay` | number  | Initial delay before starting polling.           |
-| `timeout_limit` | number  | Request timeout in milliseconds.                 |
+| `initial_delay` | number  | Initial delay before starting polling in milliseconds.           |
+| `timeout_limit` | number  | client timeout limit per request (ms).                 |
 | `exp_backoff`   | number \| null | Exponential backoff multiplier.                  |
 | `req_opts`   | Request.Init  | Fetch request options.                 |
 
@@ -84,7 +86,7 @@ const client = new MyClient(options)
 | Name          | Param Type          | Return Type                          | Desc|
 |-----------------|-----------------|--------------------------------------|---|
 | Client.isPending()         |any| Bool| Return True if server returns pending status in response body.|
-| Client.isError()         | any| Bool| Return True if server returns error status in response body. (200 OK)|
+| Client.isError()         | any| Bool| Return True if server returns error status in response body|
 | Client.getNexDelay()         | Polls| number| Returns delay of next poll in ms|
 ## Backoff Functionality 
 

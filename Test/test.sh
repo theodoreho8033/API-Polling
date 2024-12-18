@@ -1,19 +1,24 @@
-# Start the Go server in the background
+
+cd "$(dirname "$0")"
+
+echo building project...
+cd ../Client
 npm run build
+cd ../Test
+npm run build
+
 echo "Starting Go server..."
 go run ../Backend/server.go &
-SERVER_PID=$! # Save the server process ID
+SERVER_PID=$! 
 
 echo "Sleeping 10s for server to start"
-# Allow time for the server to start
 sleep 10
 
-# Run the test cases
+
 echo "Running test cases..."
 npm run test
 
-# Kill the Go server process after tests finish
+
 echo "Stopping Go server..."
 kill $SERVER_PID
-
 echo "Done!"

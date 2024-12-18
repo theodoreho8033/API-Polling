@@ -10,78 +10,82 @@ import (
 	"time"
 )
 
-// =========================== Simulation Instance ===========================
-
 type SimInstance struct {
-	sim_time       time.Duration
-	err_rate       float64
-	req_status     string
-	timeout_limit  time.Duration
-	status_updated chan struct{}
-	lock           sync.Mutex
-	server_wait    time.Duration
+	sim_time       time.Duration // execution time of simulated process
+	err_rate       float64       // probaility of returning {result: error}
+	req_status     string        // status of process ('pending', 'error', 'complete')
+	status_updated chan struct{} // channel to signal when process finishes pending
+	lock           sync.Mutex    //mutex lock
+	server_wait    time.Duration //time server takes to send a request. only used for testing client timeouts
 }
 
-func newSim(sim_time time.Duration, err_rate float64, timeout_limit time.Duration) *SimInstance {
+// initialize SimInstnce with default paramaters
+func newSim() *SimInstance {
 	return &SimInstance{
-		sim_time:       sim_time,
-		err_rate:       err_rate,
+		sim_time:       1000,
+		err_rate:       0.0,
 		req_status:     "init",
-		timeout_limit:  timeout_limit,
 		status_updated: make(chan struct{}, 1),
+		server_wait:    0,
 	}
 }
 
-func (s *SimInstance) resetSimulation(sim_time time.Duration, err_rate float64, server_wait time.Duration) {
-	s.lock.Lock()
-	if s.req_status == "pending" {
-		statusChan := s.status_updated
-		s.lock.Unlock()
+// reset simulation. changes state back to "pending" and sets new SimInstance paramaters
+func (sim *SimInstance) resetSimulation(sim_time time.Duration, err_rate float64, server_wait time.Duration) {
+	sim.lock.Lock()
+
+	//	if status pending ensure simulation finishes before resetting
+	if sim.req_status == "pending" {
+		statusChan := sim.status_updated
+		sim.lock.Unlock()
 
 		<-statusChan
-		s.lock.Lock()
+		sim.lock.Lock()
 	}
+	//	set SimInstance params and open new channel
+	sim.sim_time = sim_time
+	sim.err_rate = err_rate
+	sim.server_wait = server_wait
+	sim.req_status = "pending"
+	sim.status_updated = make(chan struct{}, 1)
+	sim.lock.Unlock()
 
-	s.sim_time = sim_time
-	s.err_rate = err_rate
-	s.server_wait = server_wait
-	s.req_status = "pending"
-	s.status_updated = make(chan struct{}, 1)
-	s.lock.Unlock()
-
-	s.runSim()
+	sim.runSim()
 }
 
-func (s *SimInstance) runSim() {
-	time.AfterFunc(s.sim_time, func() {
-		s.lock.Lock()
-		defer s.lock.Unlock()
+// after configured simulation time, update status properly
+func (sim *SimInstance) runSim() {
 
-		if s.req_status == "pending" {
+	time.AfterFunc(sim.sim_time, func() {
+		sim.lock.Lock()
+		defer sim.lock.Unlock()
+
+		if sim.req_status == "pending" {
+
+			// error rate implentation
 			rand_float := rand.Float64()
-			if rand_float < s.err_rate {
-				s.req_status = "error"
+			if rand_float < sim.err_rate {
+				sim.req_status = "error"
 			} else {
-				s.req_status = "completed"
+				sim.req_status = "completed"
 			}
 		}
-		close(s.status_updated)
+		close(sim.status_updated)
 	})
 }
 
-// =========================== HTTP Handlers ===========================
-
-func shortPollHandler(sim *SimInstance) http.HandlerFunc {
+// route /status sends {result: pending or error or complete} as response to client
+func statusHandler(sim *SimInstance) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(sim.server_wait)
 		sim.lock.Lock()
 		defer sim.lock.Unlock()
 
-		w.Header().Set("Content-Type", "application/json")
 		jsonResponse(w, map[string]string{"result": sim.req_status})
 	}
 }
 
+// route /reset is used for resetting the SimInstance paramaters. used for reconfiguring server for different tests without needing to restart server
 func resetHandler(sim *SimInstance) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -101,7 +105,7 @@ func resetHandler(sim *SimInstance) http.HandlerFunc {
 		}
 
 		sim.resetSimulation(
-			time.Duration(getOrDefault(req.SimTime, 5))*time.Second,
+			time.Duration(getOrDefault(req.SimTime, 5))*time.Millisecond,
 			getOrDefault(req.ErrRate, 0.0),
 			time.Duration(getOrDefault(req.ServerWait, 0))*time.Millisecond,
 		)
@@ -110,8 +114,7 @@ func resetHandler(sim *SimInstance) http.HandlerFunc {
 	}
 }
 
-// =========================== Utility Functions ===========================
-
+// helper function for adding default values
 func getOrDefault[T any](val *T, def T) T {
 	if val != nil {
 		return *val
@@ -119,15 +122,14 @@ func getOrDefault[T any](val *T, def T) T {
 	return def
 }
 
+// helper function for writing json data and sends response
 func jsonResponse(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(data)
 }
 
-// =========================== Server Setup ===========================
-
 func setupServer(sim *SimInstance, port string) *http.Server {
-	http.HandleFunc("/status", shortPollHandler(sim))
+	http.HandleFunc("/status", statusHandler(sim))
 	http.HandleFunc("/reset", resetHandler(sim))
 
 	return &http.Server{
@@ -137,18 +139,12 @@ func setupServer(sim *SimInstance, port string) *http.Server {
 	}
 }
 
-// =========================== Main Function ===========================
-
 func main() {
-	processTime := flag.Duration("process_time", 5*time.Second, "Seconds before response is sent.")
-	errorRate := flag.Float64("error_rate", 0.1, "Probability of sending error response.")
-	timeoutLimit := flag.Duration("timeout_limit", 30*time.Second, "Seconds before request times out.")
 
+	// option to set port
 	port := flag.String("port", ":8080", "Server port")
 
-	flag.Parse()
-
-	sim := newSim(*processTime, *errorRate, *timeoutLimit)
+	sim := newSim()
 	server := setupServer(sim, *port)
 
 	log.Printf("Server running on port %s", *port)

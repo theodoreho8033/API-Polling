@@ -1,91 +1,88 @@
-import { CustomClientOptions, CustomClient } from "./CustomClientDemo";
-import { ClientOptions } from "../../Client/src/ClientLibrary";
+import { TestCase } from "./TestUtil";
+
+// File for storing test cases
 
 // =========================== Success Test Cases ===========================
 
-export const testCasesSuccess = [
-    { 
-        name: "Default Config", 
-        clientOptions: {}, 
-        simConfig: { sim_time: 5, err_rate: 0.0 }, 
-        processTime: 5,
+export const testCasesSuccess: TestCase[] = [
+    {
+        name: "Default Config",
+        clientOptions: {},
+        sim_config: { sim_time: 1000, err_rate: 0.0 },
     },
-    { 
-        name: "Initial Delay 4s", 
-        clientOptions: { initial_delay: 4000 }, 
-        simConfig: { sim_time: 5, err_rate: 0.0 }, 
-        processTime: 5,
+    {
+        name: "Initial Delay 800ms",
+        clientOptions: { initial_delay: 800 },
+        sim_config: { sim_time: 1000, err_rate: 0.0 },
     },
-    { 
-        name: "Exponential Backoff", 
-        clientOptions: { exp_backoff: 2 }, 
-        simConfig: { sim_time: 5, err_rate: 0.0 }, 
-        processTime: 5,
+    {
+        name: "Exponential Backoff",
+        clientOptions: { exp_backoff: 2 },
+        sim_config: { sim_time: 1000, err_rate: 0.0 },
     },
-    { 
-        name: "Exponential Backoff + Delay 4s", 
-        clientOptions: { exp_backoff: 2, initial_delay: 4000 }, 
-        simConfig: { sim_time: 5, err_rate: 0.0 }, 
-        processTime: 5,
+    {
+        name: "Exponential Backoff + Delay 800ms",
+        clientOptions: { exp_backoff: 2, initial_delay: 800 },
+        sim_config: { sim_time: 1000, err_rate: 0.0 },
     },
 ];
 
 // =========================== Error Test Cases ===========================
 
-export const testCasesError = [
-    { 
-        name: "No Error", 
-        clientOptions: {}, 
-        simConfig: { sim_time: 1, err_rate: 0.0 }, 
-        processTime: 5,
+export const testCasesError: TestCase[] = [
+    {
+        name: "No Error",
+        clientOptions: {},
+        sim_config: { sim_time: 1000, err_rate: 0.0 },
     },
-    { 
-        name: "Invalid Route", 
-        clientOptions: { host: "http://127.0.0.1:8080/noroute" }, 
-        simConfig: { sim_time: 5, err_rate: 0.0 }, 
-        processTime: 5,
+    {
+        name: "Invalid Route",
+        clientOptions: { host: "http://127.0.0.1:8080/noroute" },
+        sim_config: { sim_time: 1000, err_rate: 0.0 },
     },
-    { 
-        name: "Max Poll Limit Reached", 
-        clientOptions: { max_polls: 1 }, 
-        simConfig: { sim_time: 5, err_rate: 0.0 }, 
-        processTime: 5,
+    {
+        name: "Max Poll Limit Reached",
+        clientOptions: { max_polls: 1 },
+        sim_config: { sim_time: 1000, err_rate: 0.0 },
     },
-    { 
-        name: "Server Timeout", 
-        clientOptions: {}, 
-        simConfig: { sim_time: 5, err_rate: 0.0, server_wait: 6000 }, 
-        processTime: 5,
+    {
+        name: "Server Timeout",
+        clientOptions: { timeout_limit: 200 },
+        sim_config: { sim_time: 1000, err_rate: 0.0, server_wait: 600 },
     },
-    { 
-        name: "{\"result\":\"error\"}", 
-        clientOptions: {}, 
-        simConfig: { sim_time: 1, err_rate: 1.0 }, 
-        processTime: 5,
+    {
+        name: "{\"result\":\"error\"}",
+        clientOptions: {},
+        sim_config: { sim_time: 1000, err_rate: 1.0 },
     },
-    { 
-        name: "Client Timeout", 
-        clientOptions: { timeout_limit: 100 }, 
-        simConfig: { sim_time: 5, server_wait: 3000 }, 
-        processTime: 5,
+    {
+        name: "Client Timeout",
+        clientOptions: { timeout_limit: 20 },
+        sim_config: { sim_time: 1000, err_rate: 0.0 },
     },
 ];
 
 // =========================== Custom Options Test ===========================
 
-export const customOptionsTest: CustomClientOptions = {
-    host: "http://127.0.0.1:8080/status",
-    poll_interval: 100,
-    max_polls: 600,
-    max_retry: 0,
-    initial_delay: 0,
-    timeout_limit: 50 * 1000,
-    req_opts: {
-        method: "GET",
-        headers: {
-            "Content-Type": "application/json",
-        },
+export const testCasesCustomClient: TestCase[] = [
+    {
+        name: "Default Delay 600ms",
+        clientOptions: { initial_delay: 600 },
+        sim_config: { sim_time: 1000, err_rate: 0.0 },
     },
-    window_starts: [1000, 5000],
-    polls_per_window: 3,
-};
+    {
+        name: "Custom: Window Polling",
+        clientOptions: { window_starts: [200, 1000], polls_per_window: 3 },
+        sim_config: { sim_time: 1000, err_rate: 0.0 },
+    },
+    {
+        name: "Default Delay 600ms",
+        clientOptions: { initial_delay: 600 },
+        sim_config: { sim_time: 200, err_rate: 0.0 },
+    },
+    {
+        name: "Custom: Window Polling",
+        clientOptions: { window_starts: [200, 1000], polls_per_window: 3 },
+        sim_config: { sim_time: 200, err_rate: 0.0 },
+    },
+];

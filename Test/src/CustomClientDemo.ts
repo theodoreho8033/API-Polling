@@ -1,13 +1,10 @@
-import { Client, ClientOptions, Polls } from '../../Client/src/ClientLibrary';
-
-// =========================== Custom Client Options ===========================
+import { Client, ClientOptions } from '../../Client/src/ClientLibrary';
 
 export interface CustomClientOptions extends ClientOptions {
     window_starts: number[]; // Start times for polling windows
     polls_per_window: number; // Number of polls allowed per window
 }
 
-// =========================== Custom Client Class ===========================
 
 export class CustomClient extends Client {
     protected readonly options: CustomClientOptions;
@@ -16,11 +13,11 @@ export class CustomClient extends Client {
         super(options);
         this.options = options;
 
-        // Set initial delay to the first window start time
+        // set initial delay to the first window start time
         this.options.initial_delay = this.options.window_starts[0];
     }
 
-    protected getNextDelay(poll: Polls): number {
+    protected getNextDelay(): number {
         const { window_starts, polls_per_window, poll_interval } = this.options;
 
         const numWindows = window_starts.length;
@@ -28,7 +25,7 @@ export class CustomClient extends Client {
 
         const curWindowIdx = Math.floor(curPollCount / polls_per_window);
 
-        // Adjust delay when moving to a new window
+        // adjust delay when moving to a new window
         if (
             curPollCount % polls_per_window === 0 &&
             curWindowIdx > 0 &&
@@ -40,7 +37,7 @@ export class CustomClient extends Client {
             return curStart - prevStart - poll_interval * (polls_per_window - 1);
         }
 
-        // Default delay
+        // default delay if not moving to new window
         return poll_interval;
     }
 }
