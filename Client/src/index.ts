@@ -1,4 +1,4 @@
-export * from './client';
+export * from './ClientLibrary';
 
 
 
