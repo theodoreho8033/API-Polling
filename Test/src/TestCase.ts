@@ -47,8 +47,8 @@ export const testCasesError: TestCase[] = [
     },
     {
         name: "Server Timeout",
-        clientOptions: { timeout_limit: 2000 },
-        sim_config: { sim_time: 1000, err_rate: 0.0, server_wait: 600 },
+        clientOptions: { timeout_limit: 20000 },
+        sim_config: { sim_time: 1000, err_rate: 0.0, server_wait: 7000 },
     },
     {
         name: "{\"result\":\"error\"}",
@@ -58,7 +58,7 @@ export const testCasesError: TestCase[] = [
     {
         name: "Client Timeout",
         clientOptions: { timeout_limit: 20 },
-        sim_config: { sim_time: 1000, err_rate: 0.0 },
+        sim_config: { sim_time: 1000, err_rate: 0.0, server_wait: 500 },
     },
 ];
 
