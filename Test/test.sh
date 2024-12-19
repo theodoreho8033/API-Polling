@@ -3,8 +3,10 @@ cd "$(dirname "$0")"
 
 echo building project...
 cd ../Client
+npm install
 npm run build
 cd ../Test
+npm install 
 npm run build
 
 echo "Starting Go server..."
