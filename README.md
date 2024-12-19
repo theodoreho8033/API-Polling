@@ -15,7 +15,7 @@ This project is a polling library used for polling a status from a provided API 
 ### Running Test Cases
 After cloning the repository, run the sh file ./Test/test.sh to test the library. 
 
-**ENSURE NODE VERSION 22 AND GO ARE INSTALLED BEFORE RUNNING TEST SCRIPT
+**ENSURE NODE VERSION 22 IS INSTALLED 
 
 ### Implementing to your application
 ```typescript
