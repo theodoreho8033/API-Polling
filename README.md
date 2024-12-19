@@ -6,7 +6,7 @@ This project is a polling library used for polling a status from a provided API 
 
 ## Key Features 
 
-- Configurable Polling: Supprot for polling intervals, retries on error, polling limit, and backoff strategies.
+- Configurable Polling: Support for polling intervals, retries on error, polling limit, and backoff strategies.
 - Customization: Easily integrate custom backoff functions.
 - Error Handling: Detects server errors, timeouts, polling and retry limits.
 - Metric Collection: Keeps track of poll count and polling time to optimize polling paramaters. 
@@ -15,7 +15,7 @@ This project is a polling library used for polling a status from a provided API 
 ### Running Test Cases
 After cloning the repository, run the sh file ./Test/test.sh to test the library. 
 
-**ENSURE NODE VERSION 22 IS INSTALLED 
+**ENSURE NODE VERSION 22 AND GO ARE ISNTALLED
 
 ### Implementing to your application
 ```typescript
