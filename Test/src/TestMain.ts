@@ -32,7 +32,7 @@ async function runAllTests() {
     console.table(customResults);
     console.log("Table Description: Demonstrating ability to override Client.getNextDelay() for a custom backoff function.");
     console.log("The expected time for a complete status is either 200ms or 1000ms. A custom Client.getNextDelay() allows users to poll in windows.");
-    console.log("In this example, since the complete status takes either 200ms or 100ms, the custom backoff function polls 3 times at 1s before waiting until 5s.")
+    console.log("In this example, since the complete status takes either 200ms or 100ms, the custom backoff function polls 3 times at 200ms before waiting until 1000ms.")
     console.log("\n\nTesting done!");
 }
 
