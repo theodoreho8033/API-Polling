@@ -143,7 +143,7 @@ func setupServer(sim *SimInstance, port string) *http.Server {
 func main() {
 
 	// option to set port
-	port := flag.String("port", "8000", "Server port")
+	port := flag.String("port", "8080", "Server port")
 	host := fmt.Sprintf("127.0.0.1:%s", *port)
 	sim := newSim()
 	server := setupServer(sim, host)
