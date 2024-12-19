@@ -10,7 +10,7 @@ npm install
 npm run build
 
 echo "Starting Go server..."
-../Backend/server &
+go run ../Backend/server.go &
 SERVER_PID=$! 
 
 echo "Sleeping 10s for server to start"
