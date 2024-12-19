@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
@@ -142,10 +143,10 @@ func setupServer(sim *SimInstance, port string) *http.Server {
 func main() {
 
 	// option to set port
-	port := flag.String("port", ":8080", "Server port")
-
+	port := flag.String("port", "8000", "Server port")
+	host := fmt.Sprintf("127.0.0.1:%s", *port)
 	sim := newSim()
-	server := setupServer(sim, *port)
+	server := setupServer(sim, host)
 
 	log.Printf("Server running on port %s", *port)
 	if err := server.ListenAndServe(); err != nil {
