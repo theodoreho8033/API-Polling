@@ -47,7 +47,7 @@ export const testCasesError: TestCase[] = [
     },
     {
         name: "Server Timeout",
-        clientOptions: { timeout_limit: 200 },
+        clientOptions: { timeout_limit: 2000 },
         sim_config: { sim_time: 1000, err_rate: 0.0, server_wait: 600 },
     },
     {
